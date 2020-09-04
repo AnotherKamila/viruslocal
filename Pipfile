@@ -1,0 +1,21 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+
+[packages]
+jupyterlab = "*"
+ipyleaflet = "*"
+voila = "*"
+doit = "*"
+requests = "*"
+pyyaml = "*"
+pathlib = "*"
+pandas = "*"
+sidecar = "*"
+xlrd = "*"
+
+[requires]
+python_version = "3.7"

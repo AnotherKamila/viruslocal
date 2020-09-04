@@ -1,0 +1,6 @@
+# Data sources used here
+PLZ:
+  filename: plz.geojson
+  description: postal codes geographical boundaries
+  url: https://swisspost.opendatasoft.com/api/v2/catalog/datasets/plz_verzeichnis_v2/exports/geojson
+  discovered_via: https://opendata.swiss/en/dataset/plz_verzeichnis/resource/040a3e7b-caf8-44bb-a9f1-b1eda0c1096f
