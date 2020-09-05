@@ -21,12 +21,15 @@ DOIT_CONFIG = {
     'action_string_formatting': 'new',
 }
 
-def tsk(taskdef, name=None):
+def tsk(basename, task, obj=None):
     """Merge in some defaults for task creation"""
+    if not obj: obj, task = task, None  # argument order
     return {
-        'name':  name,
-        'title': lambda task: f'{task.name}  -> {task.targets[0]}',
-        **taskdef,  # merge in, overriding previous
+        'basename': basename,
+        'name':     task,
+        'title':    lambda t: f'{t.name}  -> {t.targets[0]}',
+        'clean':    True,
+        **obj,  # merge in, overriding previous
     }
 
 # TODO make use of https://pydoit.org/tasks.html#keywords-on-python-action
@@ -42,14 +45,12 @@ def task_data_download():
     With thanks to opendata.swiss.
     """
     for name, meta in DATA_SOURCES.items():
-        yield {
-            'basename': 'data:download',
-            'name':     name,
+        yield tsk('data:download', name, {
             'title':    lambda task: f'{task.name} ({meta["description"]})  -> {task.targets[0]}',
             'targets':  [DATA/meta['filename']],
             'actions':  [(download, (meta['url'], DATA/meta['filename']))],
             'uptodate': [config_changed(meta['url'])],
-        }
+        })
 
 def task_data_split_by_canton():
     """Split data by canton
@@ -59,12 +60,11 @@ def task_data_split_by_canton():
     """
     for canton in CANTONS:
         fname = 'plz-{}.geojson'.format(canton)
-        yield tsk({
-            'basename': 'data:split_by_canton',
+        yield tsk('data:split_by_canton', canton, {
             'targets':  [DATA/fname],
             'file_dep': [DATA/'plz.geojson'],
             'actions':  [(geoutils.filter_canton, (DATA/'plz.geojson', canton, DATA/fname))],
-        }, canton)
+        })
 
 # TODO update doc
 def task_data_cleanup():
@@ -84,12 +84,11 @@ def task_data_cleanup():
     for canton in CANTONS:
         in_fname  = 'plz-{}-fixed.geojson'.format(canton)
         out_fname = 'plz-{}-fewprops.geojson'.format(canton)
-        yield tsk({
-            'basename': 'data:cleanup',
+        yield tsk('data:cleanup', canton, {
             'targets':  [DATA/out_fname],
             'file_dep': [DATA/in_fname],
             'actions':  [(geoutils.copy_props, (my_props, DATA/in_fname, DATA/out_fname))],
-        }, canton)
+        })
 
 def task_data_simplify():
     """Simplify geometry to make the geo data faster to render
@@ -106,12 +105,11 @@ def task_data_simplify():
     improving this step would be very welcome.
     """
     for canton in CANTONS:
-        yield tsk({
-            'basename': 'data:simplify',
+        yield tsk('data:simplify', canton, {
             'file_dep': [DATA/'plz-{}-fewprops.geojson'.format(canton)],
             'targets':  [DATA/'plz-{}-lowres.geojson'.format(canton)],
             'actions':  ['mapshaper {dependencies} -simplify 10% keep-shapes -o {targets}'],
-        }, canton)
+        })
 
 def task_data_sanity_check():
     """Check assumptions about data files"""
@@ -128,12 +126,11 @@ def task_data_sanity_check():
         },
     }
     for fname, checks in files.items():
-        yield tsk({
-            'basename': 'data:sanity_check',
+        yield tsk('data:sanity_check', fname, {
             'title':    lambda task: f'{task.name}  -> {next(iter(task.file_dep))}',
             'file_dep': [DATA/fname],
             'actions':  [(geoutils.check_props, (DATA/fname, checks))],
-        }, fname)
+        })
 
     # ### Check consistency among data sources
     # yield {
@@ -158,8 +155,7 @@ def task_data_join_swisstopo_geometry():
         data_f   = f'plz-{canton}.geojson'
         geom_f   = 'PLZO_PLZ.geojson'
         target_f = f'plz-{canton}-fixed.geojson'
-        yield tsk({
-            'basename': f'data:join_swisstopo_geometry',
+        yield tsk('data:join_swisstopo_geometry', canton, {
             'file_dep': [DATA/data_f, DATA/geom_f, DATA/'plz.geojson'],
             'task_dep': ['data:sanity_check:{}'.format(f) for f in [geom_f, 'plz.geojson']],
             'targets':  [DATA/target_f],
@@ -168,4 +164,4 @@ def task_data_join_swisstopo_geometry():
                     geom=(DATA/geom_f, geom_key),
                     save_as=DATA/target_f,
                 ))]
-        }, canton)
+        })

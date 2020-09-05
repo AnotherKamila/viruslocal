@@ -13,7 +13,7 @@ def filter_canton(geojson, canton, save_as=None):
     res['features'] = [ f for f in geojson['features'] if keep(f) ]
 
     if save_as: save_json(res, save_as)
-    return res
+    else: return res
 
 
 def copy_props(props_dict, geojson, save_as=None):
@@ -23,7 +23,8 @@ def copy_props(props_dict, geojson, save_as=None):
         f['properties'] = { k: f['properties'][v] for k, v in props_dict.items() }
 
     if save_as: save_json(res, save_as)
-    return res
+    else: return res
+
 
 # def offset_coordinates(geojson, offset=(-0.00117, -0.00133)):
 #     """
@@ -67,11 +68,11 @@ def replace_geometry(data, geom, save_as=None):
             collected_geom[key] = feature['geometry']
 
     # 3. stick it into result
-    result_geojson = copy.deepcopy(data_geojson)
-    for feature in result_geojson['features']:
+    res = copy.deepcopy(data_geojson)
+    for feature in res['features']:
         key = data_key_fn(feature['properties'])
         assert collected_geom[key] != 'PLACEHOLDER', 'Missing geometry for key {}'.format(key)
         feature['geometry'] = collected_geom[key]
 
-    if save_as: save_json(result_geojson, save_as)
-    return result_geojson
+    if save_as: save_json(res, save_as)
+    else: return res
