@@ -2,7 +2,7 @@ import functools
 import json
 import requests
 import sys
-
+from pprint import pprint
 
 def debug(*args, **kwargs):
     print(
@@ -12,6 +12,14 @@ def debug(*args, **kwargs):
         ),
         file=sys.stderr,
     )
+
+def pdebug(*args, **kwargs):
+    for arg in args:
+        print('*** ', end='', file=sys.stderr)
+        pprint(arg, stream=sys.stderr)
+    for k,v in kwargs.items():
+        print(f'*** {k}: ', end='', file=sys.stderr)
+        pprint(v, stream=sys.stderr)
 
 def download(url, fname):
     with open(fname, 'wb') as f:

@@ -18,10 +18,17 @@ with open('./data_sources.yml') as f:
 
 DOIT_CONFIG = {
     'default_tasks': DEFAULT_TASKS,
-    'action_string_formatting': 'new'
+    'action_string_formatting': 'new',
 }
 
-# TODO make task title formatting and similar DRY => e.g. with a fn that merges with a default dict
+def tsk(taskdef, name=None):
+    """Merge in some defaults for task creation"""
+    return {
+        'name':  name,
+        'title': lambda task: f'{task.name}  -> {task.targets[0]}',
+        **taskdef,  # merge in, overriding previous
+    }
+
 # TODO make use of https://pydoit.org/tasks.html#keywords-on-python-action
 # TODO many of these functions are just save_json/load_json wrappers around
 # simple things => maybe make the geoutils functions accept geojson or filename
@@ -59,14 +66,12 @@ def task_data_split_by_canton():
 
     for canton in CANTONS:
         fname = 'plz-{}.geojson'.format(canton)
-        yield {
+        yield tsk({
             'basename': 'data:split_by_canton',
-            'name':     canton,
-            'title':    lambda task: f'{task.name}  -> {task.targets[0]}',
             'targets':  [DATA/fname],
             'file_dep': [DATA/'plz.geojson'],
             'actions':  [(save_canton, (canton, DATA/fname))],
-        }
+        }, canton)
 
 # TODO update doc
 def task_data_cleanup():
@@ -99,14 +104,12 @@ def task_data_cleanup():
     for canton in CANTONS:
         in_fname  = 'plz-{}-fixed.geojson'.format(canton)
         out_fname = 'plz-{}-fewprops.geojson'.format(canton)
-        yield {
+        yield tsk({
             'basename': 'data:cleanup',
-            'name':     canton,
-            'title':    lambda task: f'{task.name}  -> {task.targets[0]}',
             'targets':  [DATA/out_fname],
             'file_dep': [DATA/in_fname],
             'actions':  [(save_fixed, (DATA/in_fname, DATA/out_fname))],
-        }
+        }, canton)
 
 def task_data_simplify():
     """Simplify geometry to make the geo data faster to render
@@ -123,14 +126,12 @@ def task_data_simplify():
     improving this step would be very welcome.
     """
     for canton in CANTONS:
-        yield {
+        yield tsk({
             'basename': 'data:simplify',
-            'name':     canton,
-            'title':    lambda task: f'{task.name}  -> {task.targets[0]}',
             'file_dep': [DATA/'plz-{}-fewprops.geojson'.format(canton)],
             'targets':  [DATA/'plz-{}-lowres.geojson'.format(canton)],
             'actions':  ['mapshaper {dependencies} -simplify 10% keep-shapes -o {targets}'],
-        }
+        }, canton)
 
 def task_data_sanity_check():
     """Check assumptions about data files"""
@@ -150,13 +151,12 @@ def task_data_sanity_check():
         },
     }
     for fname, checks in files.items():
-        yield {
+        yield tsk({
             'basename': 'data:sanity_check',
-            'name':     fname,
             'title':    lambda task: f'{task.name}  -> {next(iter(task.file_dep))}',
             'file_dep': [DATA/fname],
             'actions':  [(check_file, (DATA/fname, checks))],
-        }
+        }, fname)
 
     # ### Check consistency among data sources
     # yield {
@@ -189,11 +189,10 @@ def task_data_join_swisstopo_geometry():
         data_f   = f'plz-{canton}.geojson'
         geom_f   = 'PLZO_PLZ.geojson'
         target_f = f'plz-{canton}-fixed.geojson'
-        yield {
-            'basename': f'data:join_swisstopo_geometry:{canton}',
-            'title':    lambda task: f'{task.name}  -> {task.targets[0]}',
+        yield tsk({
+            'basename': f'data:join_swisstopo_geometry',
             'file_dep': [DATA/data_f, DATA/geom_f, DATA/'plz.geojson'],
             'task_dep': ['data:sanity_check:{}'.format(f) for f in [geom_f, 'plz.geojson']],
             'targets':  [DATA/target_f],
             'actions':  [(join_geom, (DATA/data_f, DATA/geom_f, DATA/target_f))],
-        }
+        }, canton)
