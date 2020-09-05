@@ -6,6 +6,10 @@ import yaml
 from pathlib import Path
 from doit.tools import config_changed
 
+from viruslocal import geoutils
+from viruslocal.utils import debug, download, load_json, save_json
+
+DEFAULT_TASKS = ['data']
 CANTONS = ['ZH']
 DATA = Path('./data')
 DATA.mkdir(exist_ok=True)
@@ -14,67 +18,17 @@ with open('./data_sources.yml') as f:
     DATA_SOURCES = yaml.safe_load(f)
 
 
-# utils -- TODO move to its own file
+DOIT_CONFIG = {
+    'default_tasks': DEFAULT_TASKS,
+    'action_string_formatting': 'new'
+}
 
-def debug(*args, **kwargs):
-    print(
-        "{} {}".format(
-            " ".join("{}".format(a) for a in args),
-            " ".join("{}={}".format(k, v) for k, v in kwargs.items()),
-        ),
-        file=sys.stderr,
-    )
-
-def filter_canton(geojson, canton):
-    def keep(feature):
-        return (feature['geometry'] != None and
-                feature['properties']['kanton'] == canton)
-
-    return {
-        'type': geojson['type'],
-        'features': [ f for f in geojson['features'] if keep(f) ],
-    }
-
-
-def offset_coordinates(geojson, offset=(-0.00117, -0.00133)):
-    """
-    Offsets the coordinates in the GeoJSON file by an offset eyeballed to
-    approximately fix up the Special Swiss Coordinate Grid around Zurich.
-    """
-    for f in geojson['features']:
-        for polygon in f['geometry']['coordinates']:
-            for point in polygon:
-                point[0] += offset[0]
-                point[1] += offset[1]
-
-
-def download(url, fname):
-    with open(fname, 'wb') as f:
-        f.write(requests.get(url).content)
-
-def save_json(data, fname):
-    with open(fname, 'w') as f:
-        json.dump(data, f)
-
-# TODO would be neat to somehow use doit's stuff to not have to load the same
-# file multiple times
-def load_json(fname):
-    with open(fname) as f:
-        return json.load(f)
-
-# end utils
-
-DOIT_CONFIG = {'action_string_formatting': 'new'}
-
-# TODO make task title formatting pretty
+# TODO make task title formatting and similar DRY => e.g. with a fn that merges with a default dict
+# TODO make use of https://pydoit.org/tasks.html#keywords-on-python-action
 
 def task_data():
     "Prepare data"
-    # TODO implement dependencies on all data tasks
-
-    return {
-        'actions': [],
-    }
+    return {'task_dep': ['data:*'], 'actions': []}
 
 def task_data_download():
     """Download raw data files from Swiss open data sources
@@ -100,7 +54,7 @@ def task_data_split_by_canton():
     """
 
     def save_canton(canton, fname):
-        save_json(filter_canton(load_json(DATA/'plz.geojson'), canton), fname)
+        save_json(geoutils.filter_canton(load_json(DATA/'plz.geojson'), canton), fname)
 
     for canton in CANTONS:
         fname = 'plz-{}.geojson'.format(canton)
@@ -113,6 +67,7 @@ def task_data_split_by_canton():
             'actions':  [(save_canton, (canton, DATA/fname))],
         }
 
+# TODO update doc
 def task_data_cleanup():
     """Fixup coordinates and remove unused properties
 
@@ -136,13 +91,13 @@ def task_data_cleanup():
 
     def save_fixed(in_fname, out_fname):
         geojson = load_json(in_fname)
-        offset_coordinates(geojson)
+        # geoutils.offset_coordinates(geojson)
         prodify(geojson)
         save_json(geojson, out_fname)
 
     for canton in CANTONS:
-        in_fname  = 'plz-{}.geojson'.format(canton)
-        out_fname = 'plz-{}-fixed.geojson'.format(canton)
+        in_fname  = 'plz-{}-fixed.geojson'.format(canton)
+        out_fname = 'plz-{}-fewprops.geojson'.format(canton)
         yield {
             'basename': 'data:cleanup',
             'name':     canton,
@@ -152,7 +107,7 @@ def task_data_cleanup():
             'actions':  [(save_fixed, (DATA/in_fname, DATA/out_fname))],
         }
 
-def task_geodata_simplify():
+def task_data_simplify():
     """Simplify geometry to make the geo data faster to render
 
     Even after splitting by canton and removing unused properties, the GeoJSON
@@ -168,10 +123,73 @@ def task_geodata_simplify():
     """
     for canton in CANTONS:
         yield {
-            'basename': 'geodata:simplify',
+            'basename': 'data:simplify',
             'name':     canton,
             'title':    lambda task: f'{task.name}  -> {task.targets[0]}',
-            'file_dep': [DATA/'plz-{}-fixed.geojson'.format(canton)],
+            'file_dep': [DATA/'plz-{}-fewprops.geojson'.format(canton)],
             'targets':  [DATA/'plz-{}-lowres.geojson'.format(canton)],
             'actions':  ['mapshaper {dependencies} -simplify 10% keep-shapes -o {targets}'],
         }
+
+def task_data_sanity_check():
+    """Check assumptions about data files"""
+
+    ### Check assumptions about properties in GeoJSON files
+    def check_file(fname, checks):
+        geoutils.check_props(load_json(fname), checks)
+
+    files = {
+        'plz.geojson': {
+            'postleitzahl': lambda p: isinstance(p, int) and 1000 <= p <= 9999,
+            'plz_zz':       lambda p: isinstance(p, str) and len(p) == 2,
+        },
+        'PLZO_PLZ.geojson': {
+            'PLZ':     lambda p: isinstance(p, int) and 1000 <= p <= 9999,
+            'ZUSZIFF': lambda p: isinstance(p, int) and 0 <= p <= 99,
+        },
+    }
+    for fname, checks in files.items():
+        yield {
+            'basename': 'data:sanity_check',
+            'name':     fname,
+            'title':    lambda task: f'{task.name}  -> {next(iter(task.file_dep))}',
+            'file_dep': [DATA/fname],
+            'actions':  [(check_file, (DATA/fname, checks))],
+        }
+
+    # ### Check consistency among data sources
+    # yield {
+    #     'basename': 'data:sanity_check',
+    #     'name':     'plzzz',  # XD
+    #     'title':    lambda task: f'{task.name}  -> {" ".join(task.file_dep)}',
+    #     'file_dep': [DATA/'plz.geojson'],
+    #     'actions':  [(check_file, (DATA/fname, checks))],
+    # }
+
+def task_data_join_swisstopo_geometry():
+    """Join SwissTopo PLZ geo data with the Swiss Post DB
+
+    The Swiss Post has Interesting Opinions about geography (they believe in
+    flat Earth and such). The topo data from the city of Zurich can be
+    persuaded to actually match the map, so we use that for the geometry, and
+    take the data from the post's file.
+    """
+    geom_f, data_f, data_zh_f = 'PLZO_PLZ.geojson', 'plz.geojson', 'plz-ZH.geojson'
+    result_f                  = 'plz-ZH-fixed.geojson'
+    geom_key = lambda props: '{:04d}{:02d}'.format(props['PLZ'],      props['ZUSZIFF'])
+    data_key = lambda props: '{:04d}{}'.format(props['postleitzahl'], props['plz_zz'])
+
+    def join_files():
+        save_json(geoutils.replace_geometry(
+            data=(load_json(DATA/data_zh_f), data_key),
+            geom=(load_json(DATA/geom_f),    geom_key),
+        ), DATA/result_f)
+
+    return {
+        'basename': 'data:join_stadt_zurich_db:ZH',
+        'title':    lambda task: f'{task.name}  -> {task.targets[0]}',
+        'file_dep': [DATA/geom_f, DATA/data_f, DATA/data_zh_f],
+        'task_dep': ['data:sanity_check:{}'.format(fname) for fname in [geom_f, data_f]],
+        'targets':  [DATA/result_f],
+        'actions':  [join_files],
+    }
