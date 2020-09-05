@@ -30,9 +30,6 @@ def tsk(taskdef, name=None):
     }
 
 # TODO make use of https://pydoit.org/tasks.html#keywords-on-python-action
-# TODO many of these functions are just save_json/load_json wrappers around
-# simple things => maybe make the geoutils functions accept geojson or filename
-# (via a @with_json_or_file decorator)
 
 def task_data():
     "Prepare data"
@@ -60,17 +57,13 @@ def task_data_split_by_canton():
     Filter out the raw files to create per-canton data. We do this to avoid
     having to work with large files, as we always do things per canton anyway.
     """
-
-    def save_canton(canton, fname):
-        save_json(geoutils.filter_canton(load_json(DATA/'plz.geojson'), canton), fname)
-
     for canton in CANTONS:
         fname = 'plz-{}.geojson'.format(canton)
         yield tsk({
             'basename': 'data:split_by_canton',
             'targets':  [DATA/fname],
             'file_dep': [DATA/'plz.geojson'],
-            'actions':  [(save_canton, (canton, DATA/fname))],
+            'actions':  [(geoutils.filter_canton, (DATA/'plz.geojson', canton, DATA/fname))],
         }, canton)
 
 # TODO update doc
@@ -87,20 +80,7 @@ def task_data_cleanup():
     We also remove unneeded properties to make the resulting GeoJSON files
     smaller and thus faster to download to the client.
     """
-
-    def prodify(geojson):
-        for f in geojson['features']:
-            # centerpoint = f['properties']['geo_point_2d']
-            new_props = {'ortbez': 'ortbez27', 'plz': 'postleitzahl'}
-            f['properties'] = { k: f['properties'][v] for k, v in new_props.items() }
-            # f['properties']['centerpoint'] = [centerpoint['lat'], centerpoint['lon']]
-
-    def save_fixed(in_fname, out_fname):
-        geojson = load_json(in_fname)
-        # geoutils.offset_coordinates(geojson)
-        prodify(geojson)
-        save_json(geojson, out_fname)
-
+    my_props = {'ortbez': 'ortbez27', 'plz': 'postleitzahl'}
     for canton in CANTONS:
         in_fname  = 'plz-{}-fixed.geojson'.format(canton)
         out_fname = 'plz-{}-fewprops.geojson'.format(canton)
@@ -108,7 +88,7 @@ def task_data_cleanup():
             'basename': 'data:cleanup',
             'targets':  [DATA/out_fname],
             'file_dep': [DATA/in_fname],
-            'actions':  [(save_fixed, (DATA/in_fname, DATA/out_fname))],
+            'actions':  [(geoutils.copy_props, (my_props, DATA/in_fname, DATA/out_fname))],
         }, canton)
 
 def task_data_simplify():
@@ -137,9 +117,6 @@ def task_data_sanity_check():
     """Check assumptions about data files"""
 
     ### Check assumptions about properties in GeoJSON files
-    def check_file(fname, checks):
-        geoutils.check_props(load_json(fname), checks)
-
     files = {
         'plz.geojson': {
             'postleitzahl': lambda p: isinstance(p, int) and 1000 <= p <= 9999,
@@ -155,7 +132,7 @@ def task_data_sanity_check():
             'basename': 'data:sanity_check',
             'title':    lambda task: f'{task.name}  -> {next(iter(task.file_dep))}',
             'file_dep': [DATA/fname],
-            'actions':  [(check_file, (DATA/fname, checks))],
+            'actions':  [(geoutils.check_props, (DATA/fname, checks))],
         }, fname)
 
     # ### Check consistency among data sources
@@ -177,14 +154,6 @@ def task_data_join_swisstopo_geometry():
     """
     geom_key = lambda props: f"{props['PLZ']:04d}{props['ZUSZIFF']:02d}"
     data_key = lambda props: f"{props['postleitzahl']:04d}{props['plz_zz']}"
-
-    def join_geom(data_f, geom_f, result_f):
-        # debug(data_f=data_f, geom_f=geom_f)
-        save_json(geoutils.replace_geometry(
-            data=(load_json(data_f), data_key),
-            geom=(load_json(geom_f), geom_key),
-        ), result_f)
-
     for canton in CANTONS:
         data_f   = f'plz-{canton}.geojson'
         geom_f   = 'PLZO_PLZ.geojson'
@@ -194,5 +163,9 @@ def task_data_join_swisstopo_geometry():
             'file_dep': [DATA/data_f, DATA/geom_f, DATA/'plz.geojson'],
             'task_dep': ['data:sanity_check:{}'.format(f) for f in [geom_f, 'plz.geojson']],
             'targets':  [DATA/target_f],
-            'actions':  [(join_geom, (DATA/data_f, DATA/geom_f, DATA/target_f))],
+            'actions':  [(geoutils.replace_geometry, [], dict(
+                    data=(DATA/data_f, data_key),
+                    geom=(DATA/geom_f, geom_key),
+                    save_as=DATA/target_f,
+                ))]
         }, canton)

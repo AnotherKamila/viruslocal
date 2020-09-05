@@ -2,6 +2,7 @@ import functools
 import json
 import requests
 import sys
+from pathlib import Path
 from pprint import pprint
 
 def debug(*args, **kwargs):
@@ -38,3 +39,18 @@ def load_json(fname):
     """
     with open(fname) as f:
         return json.load(f)
+
+def as_json(obj):
+    """Turns things into dicts by parsing them as JSON.
+
+    When passed a file path or file object, it will read and parse it.
+    No-op on things that are already dicts.
+    Allows functions to transparently accept filenames, file objects, or
+    already-parsed data.
+    """
+    if isinstance(obj, dict): return obj
+    if hasattr(obj, 'read'):  return json.load(obj)
+    if isinstance(obj, str) or isinstance(obj, Path):
+        return load_json(obj)
+    return ValueError(f"Don't know how to read type '{type(obj)}' as JSON")
+
