@@ -1,6 +1,4 @@
 import json
-import requests
-import sys
 import yaml
 
 from pathlib import Path
@@ -25,6 +23,9 @@ DOIT_CONFIG = {
 
 # TODO make task title formatting and similar DRY => e.g. with a fn that merges with a default dict
 # TODO make use of https://pydoit.org/tasks.html#keywords-on-python-action
+# TODO many of these functions are just save_json/load_json wrappers around
+# simple things => maybe make the geoutils functions accept geojson or filename
+# (via a @with_json_or_file decorator)
 
 def task_data():
     "Prepare data"
@@ -174,22 +175,25 @@ def task_data_join_swisstopo_geometry():
     persuaded to actually match the map, so we use that for the geometry, and
     take the data from the post's file.
     """
-    geom_f, data_f, data_zh_f = 'PLZO_PLZ.geojson', 'plz.geojson', 'plz-ZH.geojson'
-    result_f                  = 'plz-ZH-fixed.geojson'
-    geom_key = lambda props: '{:04d}{:02d}'.format(props['PLZ'],      props['ZUSZIFF'])
-    data_key = lambda props: '{:04d}{}'.format(props['postleitzahl'], props['plz_zz'])
+    geom_key = lambda props: f"{props['PLZ']:04d}{props['ZUSZIFF']:02d}"
+    data_key = lambda props: f"{props['postleitzahl']:04d}{props['plz_zz']}"
 
-    def join_files():
+    def join_geom(data_f, geom_f, result_f):
+        # debug(data_f=data_f, geom_f=geom_f)
         save_json(geoutils.replace_geometry(
-            data=(load_json(DATA/data_zh_f), data_key),
-            geom=(load_json(DATA/geom_f),    geom_key),
-        ), DATA/result_f)
+            data=(load_json(data_f), data_key),
+            geom=(load_json(geom_f), geom_key),
+        ), result_f)
 
-    return {
-        'basename': 'data:join_stadt_zurich_db:ZH',
-        'title':    lambda task: f'{task.name}  -> {task.targets[0]}',
-        'file_dep': [DATA/geom_f, DATA/data_f, DATA/data_zh_f],
-        'task_dep': ['data:sanity_check:{}'.format(fname) for fname in [geom_f, data_f]],
-        'targets':  [DATA/result_f],
-        'actions':  [join_files],
-    }
+    for canton in CANTONS:
+        data_f   = f'plz-{canton}.geojson'
+        geom_f   = 'PLZO_PLZ.geojson'
+        target_f = f'plz-{canton}-fixed.geojson'
+        yield {
+            'basename': f'data:join_swisstopo_geometry:{canton}',
+            'title':    lambda task: f'{task.name}  -> {task.targets[0]}',
+            'file_dep': [DATA/data_f, DATA/geom_f, DATA/'plz.geojson'],
+            'task_dep': ['data:sanity_check:{}'.format(f) for f in [geom_f, 'plz.geojson']],
+            'targets':  [DATA/target_f],
+            'actions':  [(join_geom, (DATA/data_f, DATA/geom_f, DATA/target_f))],
+        }

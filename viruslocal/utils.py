@@ -1,5 +1,7 @@
-import json
 import functools
+import json
+import requests
+import sys
 
 
 def debug(*args, **kwargs):
