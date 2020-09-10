@@ -16,6 +16,7 @@ pathlib = "*"
 pandas = "*"
 sidecar = "*"
 xlrd = "*"
+shapely = "*"
 
 [requires]
 python_version = "3.7"

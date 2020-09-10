@@ -108,7 +108,7 @@ def task_data_simplify():
         yield tsk('data:simplify', canton, {
             'file_dep': [DATA/'plz-{}-fewprops.geojson'.format(canton)],
             'targets':  [DATA/'plz-{}-lowres.geojson'.format(canton)],
-            'actions':  ['mapshaper {dependencies} -simplify 10% keep-shapes -o {targets}'],
+            'actions':  ['mapshaper snap {dependencies} -simplify 10% keep-shapes -o {targets}'],
         })
 
 def task_data_sanity_check():
