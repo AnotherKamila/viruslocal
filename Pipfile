@@ -17,6 +17,7 @@ pandas = "*"
 sidecar = "*"
 xlrd = "*"
 shapely = "*"
+bqplot = "*"
 
 [requires]
 python_version = "3.7"

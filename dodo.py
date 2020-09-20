@@ -80,7 +80,7 @@ def task_data_cleanup():
     We also remove unneeded properties to make the resulting GeoJSON files
     smaller and thus faster to download to the client.
     """
-    my_props = {'ortbez': 'ortbez27', 'plz': 'postleitzahl'}
+    my_props = {'ortbez': 'ortbez18', 'plz': 'postleitzahl'}
     for canton in CANTONS:
         in_fname  = 'plz-{}-fixed.geojson'.format(canton)
         out_fname = 'plz-{}-fewprops.geojson'.format(canton)
