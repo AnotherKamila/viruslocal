@@ -165,3 +165,6 @@ def task_data_join_swisstopo_geometry():
                     save_as=DATA/target_f,
                 ))]
         })
+
+# TODO check that mapshaper is installed
+# TODO long running task for running the notebook and voila
