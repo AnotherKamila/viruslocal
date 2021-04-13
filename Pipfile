@@ -18,6 +18,7 @@ sidecar = "*"
 xlrd = "*"
 shapely = "*"
 bqplot = "*"
+openpyxl = "*"
 
 [requires]
 python_version = "3.7"
