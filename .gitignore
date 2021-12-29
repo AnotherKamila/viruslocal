@@ -1,3 +1,7 @@
 .doit.*
 .ipynb_checkpoints/
 data/
+
+# TEMPORARY (:D) until I pull the data automatically into binder or whatever hosting
+!data/f.xlsx
+!data/plz-ZH-lowres.geojson
