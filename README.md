@@ -3,7 +3,7 @@
 Guess what? **Work in Progress!!!** :D
 
 Despite that:
-[![Open in Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/anotherkamila/viruslocal/HEAD?labpath=voila%2Frender%2Fcovid19-zrh.ipynb)
+[![Open in Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/anotherkamila/viruslocal/HEAD?urlpath=voila%2Frender%2Fcovid19-zrh.ipynb)
 
 
 ## TODO describe what this is
